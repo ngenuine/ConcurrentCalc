@@ -11,6 +11,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
+find_package(Threads REQUIRED)
 
 message(STATUS "Using Qt version ${QT_VERSION_MAJOR}")
 
@@ -47,11 +48,13 @@ else()
         ${PROJECT_SOURCES}
         ${PROJECT_UIS}
     )
-    # qt5_wrap_ui(PROJECT_UIS ${PROJECT_UIS})
     target_sources(ConcurrentCalc PRIVATE ${PROJECT_UIS})
 endif()
 
-target_link_libraries(ConcurrentCalc PRIVATE Qt${QT_VERSION_MAJOR}::Widgets)
+target_link_libraries(ConcurrentCalc PRIVATE
+    Qt${QT_VERSION_MAJOR}::Widgets
+    Threads::Threads
+)
 
 set_target_properties(ConcurrentCalc PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
