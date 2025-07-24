@@ -48,9 +48,6 @@ private:
 
     std::thread m_solver;
     std::thread m_printer;
-
-    std::mutex              m_endMutex;
-    std::condition_variable m_cvEnd;
 };
 
 #endif  // BACKEND_H

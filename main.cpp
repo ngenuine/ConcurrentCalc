@@ -79,7 +79,7 @@ void TestBackend()
     backend.Submit({"7 * 7 - 20 / 5 + 3"s, 1s});
     std::this_thread::sleep_for(1s);
 
-    std::this_thread::sleep_for(3s);  // Дождаться исполнения расчетов в тесте.
+    // std::this_thread::sleep_for(3s);  // Дождаться исполнения расчетов в тесте.
 
     std::cout << std::endl;
 }

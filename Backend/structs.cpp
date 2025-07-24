@@ -13,7 +13,6 @@ Request::Request(std::string request, std::chrono::seconds sec)
     : timeout(sec)
 {
     // TODO: а если число с '-' начинается? Или идет оператор, а потом число с унарным минусом? Доработать парсер
-
     std::istringstream iss(request);
     char               ch;
     while (iss >> std::ws)

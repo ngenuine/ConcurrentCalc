@@ -52,8 +52,8 @@ Backend::Backend() = default;
 Backend::~Backend()
 {
     flowFinished = true;
-    m_cvRequests.notify_all();
-    m_cvResults.notify_all();
+    m_cvRequests.notify_all();  // TODO: если поток работает, то он пропустит уведомление.
+    m_cvResults.notify_all();  // TODO: если поток работает, то он пропустит уведомление.
 
     if (m_solver.joinable())
         m_solver.join();
@@ -73,7 +73,7 @@ void Backend::Submit(Request request)
     std::lock_guard lock(m_requestsMutex);
     m_requests.push(std::move(request));  // Пополнить очередь.
     Print(m_requests.back(), "Submit"s);
-    m_cvRequests.notify_one();  // Уведомить висящие на cv потоки (Evaluator).
+    m_cvRequests.notify_one();  // Уведомить висящие на cv потоки (Solver).
 }
 
 void Backend::Solver()
@@ -104,12 +104,13 @@ void Backend::Solver()
             m_results.push(std::move(futureResult));
         }
 
-        auto functor = [this, prom = std::move(promise), req = std::move(request), solve = Solve]() mutable {
+        auto functor = [this, prom = std::move(promise), req = std::move(request), solve = Solve]() mutable
+        {
             std::this_thread::sleep_for(req.timeout);
             Result result = solve(req);
             prom.set_value(result);
 
-            m_cvResults.notify_one();
+            m_cvResults.notify_one();  // Уведомить висящие на cv потоки (Printer).
         };
         std::thread t(std::move(functor));
         t.detach();
