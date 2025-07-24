@@ -35,12 +35,13 @@ private:
     void       Print(const Result& result, const std::string& prefix = "");
     void       Print(const Request& request, const std::string& prefix = "");
     void       PrintError(const std::string& error);
-    // Запросы
+    
+    // Запросы.
     std::condition_variable m_cvRequests;
     std::mutex              m_requestsMutex;
     std::queue<Request>     m_requests;
 
-    // Результаты
+    // Результаты.
     std::condition_variable         m_cvResults;
     std::mutex                      m_resultsMutex;
     std::queue<std::future<Result>> m_results;

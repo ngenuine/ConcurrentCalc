@@ -12,17 +12,17 @@ using namespace std::literals;
 Result Solve(const Request& req)
 {
     double result    = 0.0;
-    char   currentOp = '+';  // первая операция всегда '+'
+    char   currentOp = '+';
 
     for (const auto& entity : req.toEval)
     {
         if (std::holds_alternative<char>(entity))
         {
-            currentOp = std::get<char>(entity);  // сохраняем операцию
+            currentOp = std::get<char>(entity);
         }
         else
         {
-            double value = std::get<double>(entity);  // следующее число
+            double value = std::get<double>(entity);
             switch (currentOp)
             {
             case '+':

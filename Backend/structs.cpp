@@ -8,8 +8,9 @@
 Request::Request() = default;
 
 // TODO: добавить валидацию на синтаксическую правильность (две подряд операции, два подря числа без операции,
-// неизвестный символ), на деление на 0
-Request::Request(std::string request, std::chrono::seconds sec) : timeout(sec)
+// неизвестный символ), на деление на 0.
+Request::Request(std::string request, std::chrono::seconds sec)
+    : timeout(sec)
 {
     // TODO: а если число с '-' начинается? Или идет оператор, а потом число с унарным минусом? Доработать парсер
 
