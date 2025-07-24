@@ -19,8 +19,8 @@ int main(int argc, char* argv[])
     QApplication   a(argc, argv);
     CalcMainWindow w;
 
-    TestRequest();
-    TestBackend();
+    // TestRequest();
+    // TestBackend();
 
     w.show();
 

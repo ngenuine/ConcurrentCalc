@@ -17,8 +17,10 @@ class CalcMainWindow : public QMainWindow
 public:
     CalcMainWindow(QWidget* parent = nullptr);
     ~CalcMainWindow();
-
+protected:
+    bool eventFilter(QObject* obj, QEvent* event) override;
 private:
-    Ui::CalcMainWindow* ui;
+    struct Impl;
+    std::unique_ptr<Impl> m_pImpl;
 };
 #endif  // CALCMAINWINDOW_H
