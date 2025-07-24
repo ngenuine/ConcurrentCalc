@@ -1,9 +1,14 @@
 #include "backend.h"
 #include "structs.h"
 
+#include <QDebug>
+
 #include <condition_variable>
+#include <future>
 #include <iostream>
+#include <mutex>
 #include <queue>
+#include <string>
 #include <thread>
 #include <variant>
 
@@ -47,13 +52,50 @@ Result Solve(const Request& req)
     return Result{req.ToString(), result};
 }
 
-Backend::Backend() = default;
-
-Backend::~Backend()
+struct Manager : public std::enable_shared_from_this<Manager>
 {
-    flowFinished = true;
-    m_cvRequests.notify_all();  // TODO: если поток работает, то он пропустит уведомление.
-    m_cvResults.notify_all();  // TODO: если поток работает, то он пропустит уведомление.
+    Manager();
+    ~Manager();
+
+    void Start();
+
+    void Solver();
+    void Printer();
+
+    void Print(const Result& result, const std::string& prefix = "");
+    void Print(const Request& request, const std::string& prefix = "");
+    void PrintError(const std::string& error);
+
+    bool m_flowFinished;
+
+    std::mutex m_printMutex;
+
+    // Запросы.
+    std::condition_variable m_cvRequests;
+    std::mutex              m_requestsMutex;
+    std::queue<Request>     m_requests;
+
+    // Результаты.
+    std::condition_variable         m_cvResults;
+    std::mutex                      m_resultsMutex;
+    std::queue<std::future<Result>> m_results;
+
+    std::thread m_solver;
+    std::thread m_printer;
+};
+
+Manager::Manager()
+    : m_flowFinished(false)
+{
+}
+
+Manager::~Manager()
+{
+    m_flowFinished = true;
+
+    // Уведомить висящие на cv потоки о завершении работы.
+    m_cvRequests.notify_all();
+    m_cvResults.notify_all();
 
     if (m_solver.joinable())
         m_solver.join();
@@ -61,30 +103,27 @@ Backend::~Backend()
         m_printer.join();
 }
 
-void Backend::Start()
+void Manager::Start()
 {
-    flowFinished = false;
-    m_solver     = std::thread(&Backend::Solver, this);
-    m_printer    = std::thread(&Backend::Printer, this);
+    m_flowFinished = false;
+    m_solver       = std::thread(&Manager::Solver, this);
+    m_printer      = std::thread(&Manager::Printer, this);
 }
 
-void Backend::Submit(Request request)
+void Manager::Solver()
 {
-    std::lock_guard lock(m_requestsMutex);
-    m_requests.push(std::move(request));  // Пополнить очередь.
-    Print(m_requests.back(), "Submit"s);
-    m_cvRequests.notify_one();  // Уведомить висящие на cv потоки (Solver).
-}
-
-void Backend::Solver()
-{
-    while (!flowFinished)
+    while (!m_flowFinished)
     {
         Request request;
 
         {
             std::unique_lock lock(m_requestsMutex);
-            m_cvRequests.wait(lock, [this] { return !m_requests.empty() || flowFinished; });
+            m_cvRequests.wait(lock, [this] { return !m_requests.empty() || m_flowFinished; });
+
+            if (m_flowFinished)
+                break;  // Пришло уведомление из деструктора.
+
+            // Пришло уведомлние о новой задаче.
             if (!m_requests.empty())
             {
                 request = std::move(m_requests.front());
@@ -96,33 +135,46 @@ void Backend::Solver()
             }
         }
 
-        std::promise<Result> promise;
-        std::future<Result>  futureResult = promise.get_future();
+        auto                pPromise     = std::make_shared<std::promise<Result>>();
+        std::future<Result> futureResult = pPromise->get_future();
         {
-
             std::lock_guard guard(m_resultsMutex);
             m_results.push(std::move(futureResult));
         }
 
-        auto functor = [this, prom = std::move(promise), req = std::move(request), solve = Solve]() mutable
+        std::weak_ptr<Manager> pWeakData = shared_from_this();
+
+        auto functor = [this, pWeakData, pPromise, req = std::move(request), solve = Solve]() mutable
         {
             std::this_thread::sleep_for(req.timeout);
             Result result = solve(req);
-            prom.set_value(result);
 
-            m_cvResults.notify_one();  // Уведомить висящие на cv потоки (Printer).
+            // Мы в отсоединенном потоке. Слабый указатель это способ узнать, есть ли нам кого уведомлять.
+            if (auto sharedData = pWeakData.lock())
+            {
+                pPromise->set_value(result);
+                m_cvResults.notify_one();  // Уведомить висящие на cv потоки (Printer) о готовности задачи.
+            }
+            else
+            {
+                qDebug() << "сработал weak, выражение пропало: " << result.ToString();
+            }
         };
         std::thread t(std::move(functor));
         t.detach();
     }
 }
 
-void Backend::Printer()
+void Manager::Printer()
 {
-    while (!flowFinished)
+    while (!m_flowFinished)
     {
         std::unique_lock lock(m_resultsMutex);
-        m_cvResults.wait(lock, [this] { return !m_results.empty() || flowFinished; });
+        m_cvResults.wait(lock, [this] { return !m_results.empty() || m_flowFinished; });
+        if (m_flowFinished)
+            break;  // Пришло уведомление из деструктора.
+
+        // Пришло уведомление о готовности задачи.
         if (!m_results.empty())
         {
             Result result = m_results.front().get();
@@ -136,7 +188,8 @@ void Backend::Printer()
     }
 }
 
-void Backend::Print(const Result& result, const std::string& prefix)
+// TODO: Разные места печати запросов и результатов. По идее мьютексы можно назные.
+void Manager::Print(const Result& result, const std::string& prefix)
 {
     std::lock_guard lock(m_printMutex);
 
@@ -144,16 +197,35 @@ void Backend::Print(const Result& result, const std::string& prefix)
     std::cout << "\033[32m" << prefix << sep << result.ToString() << "\033[0m" << std::endl;
 }
 
-void Backend::Print(const Request& request, const std::string& prefix)
+void Manager::Print(const Request& request, const std::string& prefix)
 {
     std::lock_guard lock(m_printMutex);
     std::string     sep = prefix.empty() ? ""s : ": "s;
     std::cout << "\033[33m" << prefix << sep << request.ToString() << "\033[0m" << std::endl;
 }
 
-void Backend::PrintError(const std::string& error)
+void Manager::PrintError(const std::string& error)
 {
     std::lock_guard lock(m_printMutex);
 
     std::cout << "\033[31m" << error << "\033[0m" << std::endl;
+}
+
+Backend::Backend(QObject* parent)
+    : QObject(parent)
+    , m_pData(std::make_shared<Manager>())
+{
+    m_pData->Start();  // Завести драндулет.
+}
+
+Backend::~Backend()
+{
+}
+
+void Backend::Submit(Request request)
+{
+    std::lock_guard lock(m_pData->m_requestsMutex);
+    m_pData->m_requests.push(std::move(request));  // Поставить задачу в очередь.
+    m_pData->Print(m_pData->m_requests.back(), "Submit"s);
+    m_pData->m_cvRequests.notify_one();  // Уведомить висящие на cv потоки (Solver) о новой задаче.
 }
