@@ -4,7 +4,8 @@
 #include <QMainWindow>
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
+namespace Ui
+{
 class CalcMainWindow;
 }
 QT_END_NAMESPACE
@@ -14,10 +15,10 @@ class CalcMainWindow : public QMainWindow
     Q_OBJECT
 
 public:
-    CalcMainWindow(QWidget *parent = nullptr);
+    CalcMainWindow(QWidget* parent = nullptr);
     ~CalcMainWindow();
 
 private:
-    Ui::CalcMainWindow *ui;
+    Ui::CalcMainWindow* ui;
 };
-#endif // CALCMAINWINDOW_H
+#endif  // CALCMAINWINDOW_H

@@ -1,7 +1,7 @@
 #include "calcmainwindow.h"
 #include "./ui_calcmainwindow.h"
 
-CalcMainWindow::CalcMainWindow(QWidget *parent)
+CalcMainWindow::CalcMainWindow(QWidget* parent)
     : QMainWindow(parent)
     , ui(new Ui::CalcMainWindow)
 {

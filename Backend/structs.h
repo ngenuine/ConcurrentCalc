@@ -2,16 +2,16 @@
 #define STRUCTS_H
 
 #include <chrono>
-#include <vector>
-#include <variant>
 #include <string>
+#include <variant>
+#include <vector>
 
 using ExpressionEntity = std::variant<double, char>;
 
 struct Request
 {
     std::vector<ExpressionEntity> toEval;
-    std::chrono::seconds               timeout;
+    std::chrono::seconds          timeout;
 
     Request();
 
