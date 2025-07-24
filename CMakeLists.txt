@@ -16,11 +16,13 @@ message(STATUS "Using Qt version ${QT_VERSION_MAJOR}")
 
 set(PROJECT_HEADERS
     calcmainwindow.h
+    Backend/backend.h
 )
 
 set(PROJECT_SOURCES
-        main.cpp
-        calcmainwindow.cpp
+    main.cpp
+    calcmainwindow.cpp
+    Backend/backend.cpp
 )
 
 set(PROJECT_UIS
