@@ -1,3 +1,5 @@
 #include "backend.h"
 
-Backend::Backend() {}
+Backend::Backend()
+{
+}
