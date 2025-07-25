@@ -69,7 +69,6 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
                 std::chrono::seconds delay{ui->delaySpin->value()};
                 Request              request{expression, delay};
 
-                qDebug() << QString::fromStdString(request.ToString());
                 m_pBackend->Submit(std::move(request));
                 ui->expressionEdit->clear();
             }

@@ -45,6 +45,41 @@ std::vector<ExpressionEntity> Simplify(const std::vector<ExpressionEntity>& inpu
         }
     }
 
+    // Применить унарные минусы к числам, если перед числом с унарным минусом '*' или '/'.
+    bool                isPrevMulOrDiv = false;
+    std::vector<size_t> toRemove;
+
+    for (size_t i = 0; i < output.size(); ++i)
+    {
+        if (std::holds_alternative<char>(output[i]) &&
+            (std::get<char>(output[i]) == '*' || std::get<char>(output[i]) == '/'))
+        {
+            isPrevMulOrDiv = true;
+        }
+        else if (std::holds_alternative<char>(output[i]) && std::get<char>(output[i]) == '-' && isPrevMulOrDiv &&
+                 i + 1 < output.size())
+        {
+            if (std::holds_alternative<double>(output[i + 1]))
+            {
+                double minusValue = -std::get<double>(output[i + 1]);
+                output[i + 1]     = minusValue;
+                toRemove.push_back(i);  // запомнили индекс '-', чтобы удалить позже
+                isPrevMulOrDiv = false;
+                ++i;  // пропускаем уже обработанное число
+            }
+        }
+        else
+        {
+            isPrevMulOrDiv = false;
+        }
+    }
+
+    // Удаляем все '-' по индексам.
+    for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it)
+    {
+        output.erase(output.begin() + *it);
+    }
+
     return output;
 }
 
