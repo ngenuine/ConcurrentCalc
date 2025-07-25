@@ -23,6 +23,9 @@ public:
 
     void Submit(Request request);
 
+signals:
+    void LogResult(const QString& solution);
+
 private:
     std::shared_ptr<Manager> m_pData;
 };

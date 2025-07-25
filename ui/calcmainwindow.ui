@@ -18,10 +18,10 @@
     <item>
      <layout class="QHBoxLayout" name="horizontalLayout_6">
       <item>
-       <widget class="QListView" name="inputBiev"/>
+       <widget class="QListView" name="inputView"/>
       </item>
       <item>
-       <widget class="QListWidget" name="outputViev"/>
+       <widget class="QListView" name="outputView"/>
       </item>
      </layout>
     </item>

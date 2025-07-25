@@ -128,7 +128,7 @@ struct Manager : public std::enable_shared_from_this<Manager>
     Manager();
     ~Manager();
 
-    void Start();
+    void Start(Backend* pBackend = nullptr);
 
     void Solver();
     void Printer();
@@ -136,6 +136,8 @@ struct Manager : public std::enable_shared_from_this<Manager>
     void Print(const Result& result, const std::string& prefix = "");
     void Print(const Request& request, const std::string& prefix = "");
     void PrintError(const std::string& error);
+
+    Backend* m_pBackend;
 
     bool m_flowFinished;
 
@@ -174,8 +176,9 @@ Manager::~Manager()
         m_printer.join();
 }
 
-void Manager::Start()
+void Manager::Start(Backend* pBackend)
 {
+    m_pBackend     = pBackend;
     m_flowFinished = false;
     m_solver       = std::thread(&Manager::Solver, this);
     m_printer      = std::thread(&Manager::Printer, this);
@@ -257,11 +260,14 @@ void Manager::Printer()
         if (!m_results.empty())
         {
             Result result = m_results.front().get();
+            if (m_pBackend)
+                emit m_pBackend->LogResult(QString::fromStdString(result.ToString()));
             Print(result, "Printer");
             m_results.pop();
         }
         else
         {
+            emit m_pBackend->LogResult(QString::fromStdString("Очередь пуста"));
             PrintError("Printer: Очередь пуста"s);
         }
     }
@@ -294,7 +300,7 @@ Backend::Backend(QObject* parent)
     : QObject(parent)
     , m_pData(std::make_shared<Manager>())
 {
-    m_pData->Start();  // Завести драндулет.
+    m_pData->Start(this);  // Завести драндулет.
 }
 
 Backend::~Backend()

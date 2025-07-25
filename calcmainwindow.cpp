@@ -1,5 +1,6 @@
 #include "calcmainwindow.h"
 #include "./ui_calcmainwindow.h"
+#include "Model/expressionslistmodel.h"
 
 #include <QKeyEvent>
 #include <QLineEdit>
@@ -11,7 +12,10 @@
 
 struct CalcMainWindow::Impl
 {
-    Ui::CalcMainWindow*      ui;
+    Ui::CalcMainWindow*   ui;
+    ExpressionsListModel* m_pRequestsModel;
+    ExpressionsListModel* m_pResultsModel;
+
     std::unique_ptr<Backend> m_pBackend;
     std::unique_ptr<QTimer>  m_timer;
 
@@ -31,6 +35,18 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
 {
     ui->setupUi(pMainWindow);
     ui->expressionEdit->setFocus();
+
+    m_pRequestsModel = new ExpressionsListModel(pMainWindow);
+    m_pRequestsModel->setColor(Qt::darkGreen);
+
+    m_pResultsModel = new ExpressionsListModel(pMainWindow);
+    m_pResultsModel->setColor(QColor("#007acc"));
+
+    ui->inputView->setModel(m_pRequestsModel);
+    ui->outputView->setModel(m_pResultsModel);
+
+    QObject::connect(m_pBackend.get(), &Backend::LogResult,
+                     [this](const QString& msg) { m_pResultsModel->AddItem(msg); });
 
     m_timer->setSingleShot(true);
 
@@ -69,6 +85,7 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
                 std::chrono::seconds delay{ui->delaySpin->value()};
                 Request              request{expression, delay};
 
+                m_pRequestsModel->AddItem(QString::fromStdString(request.ToString()));
                 m_pBackend->Submit(std::move(request));
                 ui->expressionEdit->clear();
             }
