@@ -39,9 +39,17 @@ std::string Request::ToString() const
     for (const auto& entity : toEval)
     {
         if (std::holds_alternative<double>(entity))
-            oss << std::fixed << std::setprecision(2) << std::get<double>(entity);
+        {
+            double value = std::get<double>(entity);
+            if (value == static_cast<int>(value))
+                oss << static_cast<int>(value);
+            else
+                oss << std::fixed << std::setprecision(2) << value;
+        }
         else
+        {
             oss << ' ' << std::get<char>(entity) << ' ';
+        }
     }
 
     return oss.str();
@@ -55,6 +63,12 @@ void Request::Print() const
 std::string Result::ToString() const
 {
     std::ostringstream oss;
-    oss << expression << " = " << std::fixed << std::setprecision(2) << result;
+    oss << expression << " = ";
+
+    if (result == static_cast<int>(result))
+        oss << static_cast<int>(result);
+    else
+        oss << std::fixed << std::setprecision(2) << result;
+
     return oss.str();
 }

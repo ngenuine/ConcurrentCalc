@@ -1,27 +1,27 @@
 #include "calcmainwindow.h"
 #include "./ui_calcmainwindow.h"
 
-#include <thread>
-
 #include <QKeyEvent>
 #include <QLineEdit>
 #include <QString>
 #include <QTimer>
-#include <QRegularExpressionValidator>
 
 #include "Backend/backend.h"
 #include "Backend/structs.h"
-#include "expressionstate.h"
 
 struct CalcMainWindow::Impl
 {
-    Impl(CalcMainWindow* pMainWindow);
-    ~Impl();
-
     Ui::CalcMainWindow*      ui;
     std::unique_ptr<Backend> m_pBackend;
-    ExpressionState state;
-    std::unique_ptr<QTimer> m_timer;
+    std::unique_ptr<QTimer>  m_timer;
+
+    QString m_cacheExpression;
+    QString m_lastError;
+
+    Impl(CalcMainWindow* pMainWindow);
+    ~Impl();
+    QString validateExpression(const QString& expr);
+    bool    isOperator(QChar c);
 };
 
 CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
@@ -34,83 +34,77 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
 
     m_timer->setSingleShot(true);
 
-    QObject::connect(m_timer.get(), &QTimer::timeout, [this]
-    {
-        // Время истекло. Если пользователь не вводил символов, то забираем из StashPop то, что было до некорректного символа.
-        if (state.Stashed())
-        {
-            QString prevCorrect = QString::fromStdString(state.StashPop());
-            ui->expressionEdit->blockSignals(true);
-            ui->expressionEdit->setText(prevCorrect);
-            ui->expressionEdit->blockSignals(false);
-            ui->expressionEdit->setStyleSheet("");
-        }
-    });
+    QObject::connect(m_timer.get(), &QTimer::timeout,
+                     [this]
+                     {
+                         if (!m_lastError.isEmpty())
+                         {
+                             ui->expressionEdit->blockSignals(true);
+                             ui->expressionEdit->setText(m_cacheExpression);
+                             ui->expressionEdit->blockSignals(false);
+                             ui->expressionEdit->setStyleSheet("");
+
+                             m_cacheExpression.clear();
+                             m_lastError.clear();
+                         }
+                     });
 
     auto expressionHandler = [this](const QString& expr)
     {
-        if (expr == " ") // Подавляем ведущие пробелы.
-        {
-            ui->expressionEdit->clear();
-            return;
-        }
-        else if (expr.isEmpty())
-        {
-            state.Reset();
-        }
-
-        qDebug() << expr;
         if (expr.endsWith('='))
         {
             QString withoutEq = expr;
             withoutEq.chop(1);
-            ui->expressionEdit->setText(withoutEq);
-
-            if (state.isAllowed('='))
-            {
-                std::string expression = ui->expressionEdit->text().toStdString();
-                std::chrono::seconds delay{ui->delaySpin->value()};
-                Request request{expression, delay};
-                m_pBackend->Submit(std::move(request));
-
-                state.Reset();
-                ui->expressionEdit->clear();
-            }
-        }
-
-        // Если введен ошибочный символ, инициируем показ ошибки в lineEdit выражения.
-        if (!expr.isEmpty() &&
-            !state.isAllowed(expr.back().toLatin1()) &&
-            !state.Stashed()) // Если Stashed() то в edit сейчас показывается ошибка,
-                              // которую в теле этого if инициировали ранее.
-        {
-            // Сохраняем все, что есть без ошибочного символа.
-            QString withoutErrorSym = expr;
-            withoutErrorSym.chop(1);
-            state.Stash(withoutErrorSym.toStdString());
-
-            // Информируем пользователя о том, что он ошибся.
-            ui->expressionEdit->setStyleSheet("QLineEdit { background-color: #ffc9c9; }");
             ui->expressionEdit->blockSignals(true);
-            ui->expressionEdit->setText(QString::fromStdString(state.What()));
+            ui->expressionEdit->setText(withoutEq);
             ui->expressionEdit->blockSignals(false);
 
-            // Заводим таймер, чтобы он убрал ошибку из поля ввода, если пользователь бездействует.
-            m_timer->start(25 * state.What().size());
+            if (!m_lastError.isEmpty())
+                return;
+
+            QString error = validateExpression(withoutEq);
+            if (error.isEmpty())
+            {
+                std::string          expression = withoutEq.toStdString();
+                std::chrono::seconds delay{ui->delaySpin->value()};
+                Request              request{expression, delay};
+
+                qDebug() << QString::fromStdString(request.ToString());
+                m_pBackend->Submit(std::move(request));
+                ui->expressionEdit->clear();
+            }
+            else
+            {
+                m_cacheExpression = withoutEq;
+                m_lastError       = error;
+
+                // Информируем пользователя о том, что он ошибся.
+                ui->expressionEdit->setStyleSheet("QLineEdit { background-color: #ffc9c9; }");
+                ui->expressionEdit->blockSignals(true);
+                ui->expressionEdit->setText(m_lastError);
+                ui->expressionEdit->blockSignals(false);
+
+                // Заводим таймер, чтобы он убрал ошибку из поля ввода, если пользователь бездействует.
+                m_timer->start(700);
+            }
+
             return;
         }
 
-        if (state.Stashed())
+        if (!m_lastError.isEmpty())
         {
-            m_timer->stop(); // Пользователь ввел что-то, поэтому таймер уже не нужен.
+            m_timer->stop();  // Пользователь ввел что-то, поэтому таймер уже не нужен.
 
-            QString additionalSymbol;
-            if (QString::fromStdString(state.What()).size() + 1 == expr.size())
-                additionalSymbol = expr.back(); // Во время отображения ошибки ввели символ.
+            QChar additionalSymbol;
+            if (m_lastError.size() + 1 == expr.size())
+                additionalSymbol = expr.back();  // Во время отображения ошибки ввели символ.
 
-            QString prevCorrect = QString::fromStdString(state.StashPop());
-            ui->expressionEdit->setText(prevCorrect + additionalSymbol);
-            return;
+            QString newText = m_cacheExpression + additionalSymbol;
+
+            m_lastError.clear();
+            m_cacheExpression.clear();
+
+            ui->expressionEdit->setText(newText);
         }
 
         ui->expressionEdit->setStyleSheet("");
@@ -123,6 +117,101 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
 CalcMainWindow::Impl::~Impl()
 {
     delete ui;
+}
+
+QString CalcMainWindow::Impl::validateExpression(const QString& expr)
+{
+    bool lastWasOperator = false;
+    bool numberHasDot    = false;
+    bool numberHasDigit  = false;
+
+    int pos = 0;
+    int len = expr.size();
+
+    if (expr.trimmed().isEmpty())
+    {
+        return "Выражение пустое";
+    }
+
+    while (pos < len)
+    {
+        QChar c = expr[pos];
+
+        if (c.isSpace())
+        {
+            ++pos;
+            continue;
+        }
+
+        if (c.isDigit())
+        {
+            lastWasOperator = false;
+            numberHasDigit  = true;
+            ++pos;
+            continue;
+        }
+
+        if (c == '.')
+        {
+            if (numberHasDot)
+            {
+                return "Ошибка: число содержит более одной точки";
+            }
+            if (!numberHasDigit)
+            {
+                return "Ошибка: точка должна следовать после цифры";
+            }
+            numberHasDot = true;
+            ++pos;
+            continue;
+        }
+
+        if (isOperator(c))
+        {
+            if (lastWasOperator)
+            {
+                // Разрешаем унарный минус в начале или после другого оператора.
+                if (!(c == '-' && (pos == 0 || isOperator(expr[pos - 1]) || expr[pos - 1].isSpace())))
+                {
+                    return "Ошибка: два оператора подряд или некорректное использование оператора";
+                }
+            }
+
+            if (pos == len - 1)
+            {
+                return "Ошибка: выражение не может заканчиваться оператором";
+            }
+
+            lastWasOperator = true;
+            numberHasDot    = false;
+            numberHasDigit  = false;
+            ++pos;
+            continue;
+        }
+
+        return QString("Ошибка: недопустимый символ '%1'").arg(c);
+    }
+
+    if (lastWasOperator)
+    {
+        return "Ошибка: выражение не может заканчиваться оператором";
+    }
+
+    return {};  // Пустая строка это валидное выражение.
+}
+
+bool CalcMainWindow::Impl::isOperator(QChar c)
+{
+    switch (c.toLatin1())
+    {
+    case '+':
+    case '-':
+    case '*':
+    case '/':
+        return true;
+    default:
+        return false;
+    }
 }
 
 CalcMainWindow::CalcMainWindow(QWidget* parent)

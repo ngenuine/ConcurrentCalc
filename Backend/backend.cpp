@@ -14,12 +14,48 @@
 
 using namespace std::literals;
 
+std::vector<ExpressionEntity> Simplify(const std::vector<ExpressionEntity>& input)
+{
+    std::vector<ExpressionEntity> output;
+
+    for (size_t i = 0; i < input.size();)
+    {
+        if (std::holds_alternative<char>(input[i]) && std::get<char>(input[i]) == '-')
+        {
+            // Подсчитываем количество подряд идущих '-'.
+            size_t j          = i;
+            int    minusCount = 0;
+
+            while (j < input.size() && std::holds_alternative<char>(input[j]) && std::get<char>(input[j]) == '-')
+            {
+                minusCount++;
+                j++;
+            }
+
+            // Заменяем группу '-' на один знак.
+            char simplifiedOp = (minusCount % 2 == 0) ? '+' : '-';
+            output.emplace_back(simplifiedOp);
+
+            i = j;  // Пропускаем все обработанные минусы.
+        }
+        else
+        {
+            output.push_back(input[i]);
+            ++i;
+        }
+    }
+
+    return output;
+}
+
 Result Solve(const Request& req)
 {
     double result    = 0.0;
     char   currentOp = '+';
 
-    for (const auto& entity : req.toEval)
+    auto simple = Simplify(req.toEval);
+
+    for (const auto& entity : simple)
     {
         if (std::holds_alternative<char>(entity))
         {
@@ -159,7 +195,9 @@ void Manager::Solver()
             }
             else
             {
-                std::cout << "[сработал weak, выражение " << "[functor id: " << std::this_thread::get_id() << " ] пропало]: " << result.ToString() << std::endl;
+                std::cout << "[сработал weak, выражение "
+                          << "[functor id: " << std::this_thread::get_id() << " ] пропало]: " << result.ToString()
+                          << std::endl;
             }
         };
         std::thread t(std::move(functor));
