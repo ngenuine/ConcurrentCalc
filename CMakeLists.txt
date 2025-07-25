@@ -19,6 +19,7 @@ set(PROJECT_HEADERS
     calcmainwindow.h
     Backend/backend.h
     Backend/structs.h
+    expressionstate.h
 )
 
 set(PROJECT_SOURCES
@@ -26,6 +27,7 @@ set(PROJECT_SOURCES
     calcmainwindow.cpp
     Backend/backend.cpp
     Backend/structs.cpp
+    expressionstate.cpp
 )
 
 set(PROJECT_UIS

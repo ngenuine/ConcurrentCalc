@@ -20,7 +20,7 @@ int main(int argc, char* argv[])
     CalcMainWindow w;
 
     // TestRequest();
-    TestBackend();
+    // TestBackend();
 
     w.show();
 
@@ -76,7 +76,7 @@ void TestBackend()
     std::this_thread::sleep_for(2s);
 
     backend.Submit({"9 / 3 + 6 * 2 - 4"s, 1s});
-    backend.Submit({"7 * 7 - 20 / 5 + 3"s, 1s});
+    // backend.Submit({"7 * 7 - 20 / 5 + 3"s, 1s});
     std::this_thread::sleep_for(1s);
 
     // FYI:

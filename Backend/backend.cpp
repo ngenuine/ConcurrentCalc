@@ -144,6 +144,8 @@ void Manager::Solver()
 
         std::weak_ptr<Manager> pWeakData = shared_from_this();
 
+        std::string reqStr = request.ToString();
+
         auto functor = [this, pWeakData, pPromise, req = std::move(request), solve = Solve]() mutable
         {
             std::this_thread::sleep_for(req.timeout);
@@ -157,10 +159,14 @@ void Manager::Solver()
             }
             else
             {
-                qDebug() << "сработал weak, выражение пропало: " << result.ToString();
+                std::cout << "[сработал weak, выражение " << "[functor id: " << std::this_thread::get_id() << " ] пропало]: " << result.ToString() << std::endl;
             }
         };
         std::thread t(std::move(functor));
+        {
+            std::lock_guard guard(m_printMutex);
+            std::cout << "начало вычислений [functor id: " << t.get_id() << "]: " << reqStr << std::endl;
+        }
         t.detach();
     }
 }

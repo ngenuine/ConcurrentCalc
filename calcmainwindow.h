@@ -11,9 +11,6 @@ public:
     CalcMainWindow(QWidget* parent = nullptr);
     ~CalcMainWindow();
 
-protected:
-    bool eventFilter(QObject* obj, QEvent* event) override;
-
 private:
     struct Impl;
     std::unique_ptr<Impl> m_pImpl;
