@@ -3,6 +3,8 @@
 
 #include <QObject>
 
+#include <memory>
+
 #include "structs.h"
 
 struct Manager;
