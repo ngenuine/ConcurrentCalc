@@ -42,6 +42,8 @@ struct CalcMainWindow::Impl
     void ManageResultsCounter(Operation op);
     void ManageRequestsCounter(Operation op);
 
+    void ExpressionHandler(const QString& expr);
+
     std::mutex m_requestsLabelMutex;
     std::mutex m_resultsLabelMutex;
 
@@ -118,70 +120,8 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
     QObject::connect(m_pBackend.get(), &Backend::ResultPromised,
                      [this] { ManageResultsCounter(Operation::INCREMENT); });
 
-    auto expressionHandler = [this](const QString& expr)
-    {
-        if (expr.endsWith('='))
-        {
-            QString withoutEq = expr;
-            withoutEq.chop(1);
-            ui->expressionEdit->blockSignals(true);
-            ui->expressionEdit->setText(withoutEq);
-            ui->expressionEdit->blockSignals(false);
-
-            if (!m_lastError.isEmpty())
-                return;
-
-            QString error = validateExpression(withoutEq);
-            if (error.isEmpty())
-            {
-                std::string          expression = withoutEq.toStdString();
-                std::chrono::seconds delay{ui->delaySpin->value()};
-                Request              request{expression, delay};
-
-                m_pRequestsModel->AddItem(QString::fromStdString(request.ToString()));
-                ManageRequestsCounter(Operation::INCREMENT);
-                m_pBackend->Submit(std::move(request));
-                ui->expressionEdit->clear();
-            }
-            else
-            {
-                m_cacheExpression = withoutEq;
-                m_lastError       = error;
-
-                // Информируем пользователя о том, что он ошибся.
-                ui->expressionEdit->setStyleSheet("QLineEdit { background-color: #ffc9c9; }");
-                ui->expressionEdit->blockSignals(true);
-                ui->expressionEdit->setText(m_lastError);
-                ui->expressionEdit->blockSignals(false);
-
-                // Заводим таймер, чтобы он убрал ошибку из поля ввода, если пользователь бездействует.
-                m_timer->start(700);
-            }
-
-            return;
-        }
-
-        if (!m_lastError.isEmpty())
-        {
-            m_timer->stop();  // Пользователь ввел что-то, поэтому таймер уже не нужен.
-
-            QChar additionalSymbol;
-            if (m_lastError.size() + 1 == expr.size())
-                additionalSymbol = expr.back();  // Во время отображения ошибки ввели символ.
-
-            QString newText = m_cacheExpression + additionalSymbol;
-
-            m_lastError.clear();
-            m_cacheExpression.clear();
-
-            ui->expressionEdit->setText(newText);
-        }
-
-        ui->expressionEdit->setStyleSheet("");
-        return;
-    };
-
-    QObject::connect(ui->expressionEdit, &QLineEdit::textChanged, expressionHandler);
+    QObject::connect(ui->expressionEdit, &QLineEdit::textChanged,
+                     [this](const QString& expr) { ExpressionHandler(expr); });
 }
 
 CalcMainWindow::Impl::~Impl()
@@ -337,6 +277,69 @@ void CalcMainWindow::Impl::ManageRequestsCounter(Operation op)
     default:
         break;
     }
+}
+
+void CalcMainWindow::Impl::ExpressionHandler(const QString& expr)
+{
+    if (expr.endsWith('='))
+    {
+        QString withoutEq = expr;
+        withoutEq.chop(1);
+        ui->expressionEdit->blockSignals(true);
+        ui->expressionEdit->setText(withoutEq);
+        ui->expressionEdit->blockSignals(false);
+
+        if (!m_lastError.isEmpty())
+            return;
+
+        QString error = validateExpression(withoutEq);
+        if (error.isEmpty())
+        {
+            std::string          expression = withoutEq.toStdString();
+            std::chrono::seconds delay{ui->delaySpin->value()};
+            Request              request{expression, delay};
+
+            m_pRequestsModel->AddItem(QString::fromStdString(request.ToString()));
+            ManageRequestsCounter(Operation::INCREMENT);
+            m_pBackend->Submit(std::move(request));
+            ui->expressionEdit->clear();
+        }
+        else
+        {
+            m_cacheExpression = withoutEq;
+            m_lastError       = error;
+
+            // Информируем пользователя о том, что он ошибся.
+            ui->expressionEdit->setStyleSheet("QLineEdit { background-color: #ffc9c9; }");
+            ui->expressionEdit->blockSignals(true);
+            ui->expressionEdit->setText(m_lastError);
+            ui->expressionEdit->blockSignals(false);
+
+            // Заводим таймер, чтобы он убрал ошибку из поля ввода, если пользователь бездействует.
+            m_timer->start(700);
+        }
+
+        return;
+    }
+
+    if (!m_lastError.isEmpty())
+    {
+        m_timer->stop();  // Пользователь ввел что-то, поэтому таймер уже не нужен.
+
+        QChar additionalSymbol;
+        if (m_lastError.size() + 1 == expr.size())
+            additionalSymbol = expr.back();  // Во время отображения ошибки ввели символ.
+
+        QString newText = m_cacheExpression + additionalSymbol;
+
+        m_lastError.clear();
+        m_cacheExpression.clear();
+
+        ui->expressionEdit->setText(newText);
+    }
+
+    ui->expressionEdit->setStyleSheet("");
+    return;
 }
 
 CalcMainWindow::CalcMainWindow(QWidget* parent)
