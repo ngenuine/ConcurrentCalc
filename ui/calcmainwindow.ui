@@ -281,14 +281,20 @@
     <property name="title">
      <string>Опции</string>
     </property>
-    <addaction name="action"/>
+    <addaction name="clear_models"/>
+    <addaction name="switch_arith"/>
    </widget>
    <addaction name="menu"/>
   </widget>
   <widget class="QStatusBar" name="statusbar"/>
-  <action name="action">
+  <action name="clear_models">
    <property name="text">
     <string>Очистить модели</string>
+   </property>
+  </action>
+  <action name="switch_arith">
+   <property name="text">
+    <string>Переключить реализацию арифметики</string>
    </property>
   </action>
  </widget>

@@ -1,5 +1,6 @@
 #include "calcmainwindow.h"
 
+#include "Backend/arithmetic.h"
 #include "Backend/backend.h"
 #include "Backend/structs.h"
 
@@ -41,9 +42,6 @@ void TestRequest()
     requests.emplace_back("50 - 25 + 10 * 3"s, 2s);       // 105.00
     requests.emplace_back("9 / 3 + 6 * 2 - 4"s, 1s);      // 14.00
     requests.emplace_back("7 * 7 - 20 / 5 + 3"s, 1s);     // 8.80
-
-    // TODO:
-    // requests.emplace_back("-2.2 * 1.5 + 4.256 - -2.72 / 2"s, 1s);   // -0.88, а должно 1,838.
 
     for (const auto& request : requests)
         request.Print();

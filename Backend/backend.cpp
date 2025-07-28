@@ -1,9 +1,12 @@
 #include "backend.h"
+#include "arithmetic.h"
 #include "structs.h"
 
 #include <QDebug>
 
+#include "arithmetic.h"
 #include <condition_variable>
+
 #include <future>
 #include <iostream>
 #include <mutex>
@@ -13,125 +16,7 @@
 #include <thread>
 #include <variant>
 
-constexpr double EPSILON = 1e-9;
-
 using namespace std::literals;
-
-std::vector<ExpressionEntity> Simplify(const std::vector<ExpressionEntity>& input)
-{
-    std::vector<ExpressionEntity> output;
-
-    for (size_t i = 0; i < input.size();)
-    {
-        if (std::holds_alternative<char>(input[i]) && std::get<char>(input[i]) == '-')
-        {
-            // Подсчитываем количество подряд идущих '-'.
-            size_t j          = i;
-            int    minusCount = 0;
-
-            while (j < input.size() && std::holds_alternative<char>(input[j]) && std::get<char>(input[j]) == '-')
-            {
-                minusCount++;
-                j++;
-            }
-
-            // Заменяем группу '-' на один знак.
-            char simplifiedOp = (minusCount % 2 == 0) ? '+' : '-';
-            output.emplace_back(simplifiedOp);
-
-            i = j;  // Пропускаем все обработанные минусы.
-        }
-        else
-        {
-            output.push_back(input[i]);
-            ++i;
-        }
-    }
-
-    // Применить унарные минусы к числам, если перед числом с унарным минусом '*' или '/'.
-    bool                isPrevMulOrDiv = false;
-    std::vector<size_t> toRemove;
-
-    for (size_t i = 0; i < output.size(); ++i)
-    {
-        if (std::holds_alternative<char>(output[i]) &&
-            (std::get<char>(output[i]) == '*' || std::get<char>(output[i]) == '/'))
-        {
-            isPrevMulOrDiv = true;
-        }
-        else if (std::holds_alternative<char>(output[i]) && std::get<char>(output[i]) == '-' && isPrevMulOrDiv &&
-                 i + 1 < output.size())
-        {
-            if (std::holds_alternative<double>(output[i + 1]))
-            {
-                double minusValue = -std::get<double>(output[i + 1]);
-                output[i + 1]     = minusValue;
-                toRemove.push_back(i);  // запомнили индекс '-', чтобы удалить позже
-                isPrevMulOrDiv = false;
-                ++i;  // пропускаем уже обработанное число
-            }
-        }
-        else
-        {
-            isPrevMulOrDiv = false;
-        }
-    }
-
-    // Удаляем все '-' по индексам.
-    for (auto it = toRemove.rbegin(); it != toRemove.rend(); ++it)
-    {
-        output.erase(output.begin() + *it);
-    }
-
-    return output;
-}
-
-Result Solve(const Request& req)
-{
-    double result    = 0.0;
-    char   currentOp = '+';
-
-    auto simple = Simplify(req.toEval);
-
-    for (const auto& entity : simple)
-    {
-        if (std::holds_alternative<char>(entity))
-        {
-            currentOp = std::get<char>(entity);
-        }
-        else
-        {
-            double value = std::get<double>(entity);
-            switch (currentOp)
-            {
-            case '+': {
-                result += value;
-                break;
-            }
-            case '-': {
-                result -= value;
-                break;
-            }
-            case '*': {
-                result *= value;
-                break;
-            }
-            case '/': {
-                if (std::abs(value) < EPSILON)
-                    throw std::logic_error("Деление на 0");
-                result /= value;
-                break;
-            }
-            default: {
-                result += value;
-                break;
-            }
-            }
-        }
-    }
-
-    return Result{req.ToString(), result};
-}
 
 struct Manager
 {
@@ -255,7 +140,7 @@ void Manager::Solver()
                 return;
             }
 
-            // Мы в отсоединенном потоке. Слабый указатель это способ узнать, есть ли нам кого уведомлять.
+            // В отсоединенном потоке слабый указатель позволит узнать, что данные бэкэнда вышли из области видимости.
             if (auto sharedData = pWeakData.lock())
             {
                 pPromise->set_value(result);
@@ -332,7 +217,6 @@ void Manager::Printer()
     }
 }
 
-// TODO: Разные места печати запросов и результатов. По идее мьютексы можно назные.
 void Manager::Print(const Result& result, const std::string& prefix)
 {
     std::lock_guard lock(m_printMutex);
@@ -364,6 +248,7 @@ Backend::Backend(QObject* parent)
 
 Backend::~Backend()
 {
+    UnloadDoIt();
 }
 
 void Backend::Submit(Request request)
@@ -372,4 +257,10 @@ void Backend::Submit(Request request)
     m_pData->m_requests.push(std::move(request));  // Поставить задачу в очередь.
     m_pData->Print(m_pData->m_requests.back(), "Submit"s);
     m_pData->m_cvRequests.notify_one();  // Уведомить висящие на cv потоки (Solver) о новой задаче.
+}
+
+void Backend::SwitchArith()
+{
+    TryLoadDoIt("../LibDoit/libdoit.so");
+    SwithcImplementation();
 }

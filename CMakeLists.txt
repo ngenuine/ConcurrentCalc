@@ -19,6 +19,7 @@ set(PROJECT_HEADERS
     calcmainwindow.h
     Backend/backend.h
     Backend/structs.h
+    Backend/arithmetic.h
     Model/expressionslistmodel.h
 )
 
@@ -27,6 +28,7 @@ set(PROJECT_SOURCES
     calcmainwindow.cpp
     Backend/backend.cpp
     Backend/structs.cpp
+    Backend/arithmetic.cpp
     Model/expressionslistmodel.cpp
 )
 
@@ -54,6 +56,8 @@ else()
     )
     target_sources(ConcurrentCalc PRIVATE ${PROJECT_UIS})
 endif()
+
+add_subdirectory(LibDoit)
 
 target_link_libraries(ConcurrentCalc PRIVATE
     Qt${QT_VERSION_MAJOR}::Widgets

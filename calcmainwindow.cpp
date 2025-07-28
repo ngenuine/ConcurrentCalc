@@ -44,6 +44,10 @@ struct CalcMainWindow::Impl
 
     std::mutex m_requestsLabelMutex;
     std::mutex m_resultsLabelMutex;
+
+private slots:
+    void on_clear_models_triggered();
+    void on_switch_arith_triggered();
 };
 
 CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
@@ -349,7 +353,12 @@ CalcMainWindow::~CalcMainWindow()
     m_pImpl->saveSettings(this);
 }
 
-void CalcMainWindow::on_action_triggered()
+void CalcMainWindow::on_clear_models_triggered()
 {
     emit ClearModels();
+}
+
+void CalcMainWindow::on_switch_arith_triggered()
+{
+    m_pImpl->m_pBackend->SwitchArith();
 }

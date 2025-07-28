@@ -15,7 +15,8 @@ signals:
     void ClearModels();
 
 private slots:
-    void on_action_triggered();
+    void on_clear_models_triggered();
+    void on_switch_arith_triggered();
 
 private:
     struct Impl;

@@ -7,13 +7,6 @@
 
 struct Manager;
 
-Result Solve(const Request& req);
-
-// double DoIt(int TypeWork, double OperandA, double OperandB) noexcept(false)
-// {
-//     return 42;
-// }
-
 class Backend : public QObject
 {
     Q_OBJECT
@@ -22,6 +15,7 @@ public:
     ~Backend();
 
     void Submit(Request request);
+    void SwitchArith();
 
 signals:
     void LogResult(const QString& solution);
