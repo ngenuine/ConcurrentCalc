@@ -2,8 +2,11 @@
 #include "./ui_calcmainwindow.h"
 #include "Model/expressionslistmodel.h"
 
+#include <mutex>
+
 #include <QKeyEvent>
 #include <QLineEdit>
+#include <QSettings>
 #include <QString>
 #include <QTimer>
 
@@ -12,9 +15,16 @@
 
 struct CalcMainWindow::Impl
 {
+    enum class Operation
+    {
+        INCREMENT = 0,
+        DECREMENT
+    };
+
     Ui::CalcMainWindow*   ui;
     ExpressionsListModel* m_pRequestsModel;
     ExpressionsListModel* m_pResultsModel;
+    ExpressionsListModel* m_pErrorsModel;
 
     std::unique_ptr<Backend> m_pBackend;
     std::unique_ptr<QTimer>  m_timer;
@@ -26,6 +36,14 @@ struct CalcMainWindow::Impl
     ~Impl();
     QString validateExpression(const QString& expr);
     bool    isOperator(QChar c);
+    void    saveSettings(CalcMainWindow* pMainWindow);
+    void    restoreSettings(CalcMainWindow* pMainWindow);
+
+    void ManageResultsCounter(Operation op);
+    void ManageRequestsCounter(Operation op);
+
+    std::mutex m_requestsLabelMutex;
+    std::mutex m_resultsLabelMutex;
 };
 
 CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
@@ -42,11 +60,36 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
     m_pResultsModel = new ExpressionsListModel(pMainWindow);
     m_pResultsModel->setColor(QColor("#007acc"));
 
+    m_pErrorsModel = new ExpressionsListModel(pMainWindow);
+    m_pErrorsModel->setColor(QColor(Qt::red));
+
     ui->inputView->setModel(m_pRequestsModel);
     ui->outputView->setModel(m_pResultsModel);
+    ui->errorsView->setModel(m_pErrorsModel);
+
+    QObject::connect(pMainWindow, &CalcMainWindow::ClearModels,
+                     [this]
+                     {
+                         m_pResultsModel->Clear();
+                         m_pRequestsModel->Clear();
+                         m_pErrorsModel->Clear();
+                     });
 
     QObject::connect(m_pBackend.get(), &Backend::LogResult,
-                     [this](const QString& msg) { m_pResultsModel->AddItem(msg); });
+                     [this](const QString& msg)
+                     {
+                         m_pResultsModel->AddItem(msg);
+                         m_pErrorsModel->AddItem("OK");
+                         ManageResultsCounter(Operation::DECREMENT);
+                     });
+
+    QObject::connect(m_pBackend.get(), &Backend::LogError,
+                     [this](const QString& error)
+                     {
+                         m_pResultsModel->AddItem("");
+                         m_pErrorsModel->AddItem(error);
+                         ManageResultsCounter(Operation::DECREMENT);
+                     });
 
     m_timer->setSingleShot(true);
 
@@ -64,6 +107,12 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
                              m_lastError.clear();
                          }
                      });
+
+    QObject::connect(m_pBackend.get(), &Backend::RequestAccepted,
+                     [this] { ManageRequestsCounter(Operation::DECREMENT); });
+
+    QObject::connect(m_pBackend.get(), &Backend::ResultPromised,
+                     [this] { ManageResultsCounter(Operation::INCREMENT); });
 
     auto expressionHandler = [this](const QString& expr)
     {
@@ -86,6 +135,7 @@ CalcMainWindow::Impl::Impl(CalcMainWindow* pMainWindow)
                 Request              request{expression, delay};
 
                 m_pRequestsModel->AddItem(QString::fromStdString(request.ToString()));
+                ManageRequestsCounter(Operation::INCREMENT);
                 m_pBackend->Submit(std::move(request));
                 ui->expressionEdit->clear();
             }
@@ -230,14 +280,76 @@ bool CalcMainWindow::Impl::isOperator(QChar c)
     }
 }
 
+void CalcMainWindow::Impl::saveSettings(CalcMainWindow* pMainWindow)
+{
+    QSettings settings("MyCompany", "MyCalcApp");
+    settings.setValue("MainWindow/Geometry", pMainWindow->saveGeometry());
+    settings.setValue("MainWindow/State", pMainWindow->saveState());
+}
+
+void CalcMainWindow::Impl::restoreSettings(CalcMainWindow* pMainWindow)
+{
+    QSettings settings("MyCompany", "MyCalcApp");
+    pMainWindow->restoreGeometry(settings.value("MainWindow/Geometry").toByteArray());
+    pMainWindow->restoreState(settings.value("MainWindow/State").toByteArray());
+}
+
+void CalcMainWindow::Impl::ManageResultsCounter(Operation op)
+{
+    std::lock_guard m(m_resultsLabelMutex);
+    auto            count = ui->resultsCount->text().toInt();
+
+    switch (op)
+    {
+    case Operation::INCREMENT: {
+        ui->resultsCount->setText(QString::number(++count));
+        break;
+    }
+    case Operation::DECREMENT: {
+        if (count > 0)
+            ui->resultsCount->setText(QString::number(--count));
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+void CalcMainWindow::Impl::ManageRequestsCounter(Operation op)
+{
+    std::lock_guard m(m_requestsLabelMutex);
+    auto            count = ui->requestsCount->text().toInt();
+
+    switch (op)
+    {
+    case Operation::INCREMENT: {
+        ui->requestsCount->setText(QString::number(++count));
+        break;
+    }
+    case Operation::DECREMENT: {
+        if (count > 0)
+            ui->requestsCount->setText(QString::number(--count));
+    }
+    default:
+        break;
+    }
+}
+
 CalcMainWindow::CalcMainWindow(QWidget* parent)
     : QMainWindow(parent)
     , m_pImpl(std::make_unique<Impl>(this))
 {
     // Устанавливаем фильтр на всё приложение.
     qApp->installEventFilter(this);
+    m_pImpl->restoreSettings(this);
 }
 
 CalcMainWindow::~CalcMainWindow()
 {
+    m_pImpl->saveSettings(this);
+}
+
+void CalcMainWindow::on_action_triggered()
+{
+    emit ClearModels();
 }

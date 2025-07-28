@@ -11,6 +11,12 @@ public:
     CalcMainWindow(QWidget* parent = nullptr);
     ~CalcMainWindow();
 
+signals:
+    void ClearModels();
+
+private slots:
+    void on_action_triggered();
+
 private:
     struct Impl;
     std::unique_ptr<Impl> m_pImpl;

@@ -37,14 +37,28 @@ QVariant ExpressionsListModel::data(const QModelIndex& index, int role) const
     if (role == Qt::DisplayRole)
         return item;
     else if (role == Qt::ForegroundRole)
+    {
+        if (item.startsWith("OK"))
+        {
+            QColor okColor = Qt::green;
+            return okColor;
+        }
+
         return m_color;
+    }
 
     return {};
 }
 
 void ExpressionsListModel::setColor(QColor color)
 {
-    beginResetModel();
     m_color = color;
+    emit dataChanged(index(0), index(m_items.size() - 1), {Qt::ForegroundRole});
+}
+
+void ExpressionsListModel::Clear()
+{
+    beginResetModel();
+    m_items.clear();
     endResetModel();
 }

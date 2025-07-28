@@ -25,6 +25,9 @@ public:
 
 signals:
     void LogResult(const QString& solution);
+    void LogError(const QString& error);
+    void RequestAccepted();
+    void ResultPromised();
 
 private:
     std::shared_ptr<Manager> m_pData;

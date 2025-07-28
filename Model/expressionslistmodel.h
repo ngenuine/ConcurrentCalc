@@ -16,6 +16,7 @@ public:
     void     setItems(const QVector<QString>& items);
     QVariant data(const QModelIndex& index, int role) const override;
     void     setColor(QColor color);
+    void     Clear();
 
 private:
     QVector<QString> m_items;

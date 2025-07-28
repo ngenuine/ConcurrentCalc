@@ -8,9 +8,12 @@
 #include <iostream>
 #include <mutex>
 #include <queue>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <variant>
+
+constexpr double EPSILON = 1e-9;
 
 using namespace std::literals;
 
@@ -101,21 +104,28 @@ Result Solve(const Request& req)
             double value = std::get<double>(entity);
             switch (currentOp)
             {
-            case '+':
+            case '+': {
                 result += value;
                 break;
-            case '-':
+            }
+            case '-': {
                 result -= value;
                 break;
-            case '*':
+            }
+            case '*': {
                 result *= value;
                 break;
-            case '/':
+            }
+            case '/': {
+                if (std::abs(value) < EPSILON)
+                    throw std::logic_error("Деление на 0");
                 result /= value;
                 break;
-            default:
+            }
+            default: {
                 result += value;
                 break;
+            }
             }
         }
     }
@@ -123,12 +133,12 @@ Result Solve(const Request& req)
     return Result{req.ToString(), result};
 }
 
-struct Manager : public std::enable_shared_from_this<Manager>
+struct Manager
 {
     Manager();
     ~Manager();
 
-    void Start(Backend* pBackend = nullptr);
+    void Initialize(std::weak_ptr<Manager> pWeakSelf, Backend* pBackend = nullptr);
 
     void Solver();
     void Printer();
@@ -137,7 +147,8 @@ struct Manager : public std::enable_shared_from_this<Manager>
     void Print(const Request& request, const std::string& prefix = "");
     void PrintError(const std::string& error);
 
-    Backend* m_pBackend;
+    std::weak_ptr<Manager> m_pWeakSelf;
+    Backend*               m_pBackend;
 
     bool m_flowFinished;
 
@@ -176,8 +187,9 @@ Manager::~Manager()
         m_printer.join();
 }
 
-void Manager::Start(Backend* pBackend)
+void Manager::Initialize(std::weak_ptr<Manager> pWeakSelf, Backend* pBackend)
 {
+    m_pWeakSelf    = pWeakSelf;
     m_pBackend     = pBackend;
     m_flowFinished = false;
     m_solver       = std::thread(&Manager::Solver, this);
@@ -209,6 +221,9 @@ void Manager::Solver()
             }
         }
 
+        emit m_pBackend->RequestAccepted();
+        std::this_thread::sleep_for(std::chrono::milliseconds(150));
+
         auto                pPromise     = std::make_shared<std::promise<Result>>();
         std::future<Result> futureResult = pPromise->get_future();
         {
@@ -216,14 +231,29 @@ void Manager::Solver()
             m_results.push(std::move(futureResult));
         }
 
-        std::weak_ptr<Manager> pWeakData = shared_from_this();
+        emit m_pBackend->ResultPromised();
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+
+        std::weak_ptr<Manager> pWeakData = m_pWeakSelf;
 
         std::string reqStr = request.ToString();
 
         auto functor = [this, pWeakData, pPromise, req = std::move(request), solve = Solve]() mutable
         {
             std::this_thread::sleep_for(req.timeout);
-            Result result = solve(req);
+
+            Result result;
+
+            try
+            {
+                result = solve(req);
+            }
+            catch (const std::logic_error& e)
+            {
+                pPromise->set_exception(std::make_exception_ptr(std::logic_error(e.what())));
+                m_cvResults.notify_one();
+                return;
+            }
 
             // Мы в отсоединенном потоке. Слабый указатель это способ узнать, есть ли нам кого уведомлять.
             if (auto sharedData = pWeakData.lock())
@@ -233,9 +263,14 @@ void Manager::Solver()
             }
             else
             {
-                std::cout << "[сработал weak, выражение "
-                          << "[functor id: " << std::this_thread::get_id() << " ] пропало]: " << result.ToString()
-                          << std::endl;
+                std::stringstream message;
+
+                message << "[сработал weak, выражение [functor id: " << std::this_thread::get_id()
+                        << " ] пропало]: " << result.ToString();
+                std::string sMessage = message.str();
+                std::cout << sMessage << std::endl;
+
+                pPromise->set_exception(std::make_exception_ptr(std::runtime_error(sMessage)));
             }
         };
         std::thread t(std::move(functor));
@@ -259,7 +294,31 @@ void Manager::Printer()
         // Пришло уведомление о готовности задачи.
         if (!m_results.empty())
         {
-            Result result = m_results.front().get();
+            Result result;
+            try
+            {
+                result = m_results.front().get();
+            }
+            catch (const std::runtime_error& e)
+            {
+                std::cout << "runtime_error: " << e.what() << std::endl;
+                m_results.pop();
+                continue;
+            }
+            catch (const std::logic_error& e)
+            {
+                std::cout << "logic_error: " << e.what() << std::endl;
+                if (m_pBackend)
+                    emit m_pBackend->LogError(QString::fromStdString(e.what()));
+                m_results.pop();
+                continue;
+            }
+            catch (...)
+            {
+                m_results.pop();
+                continue;
+            }
+
             if (m_pBackend)
                 emit m_pBackend->LogResult(QString::fromStdString(result.ToString()));
             Print(result, "Printer");
@@ -300,7 +359,7 @@ Backend::Backend(QObject* parent)
     : QObject(parent)
     , m_pData(std::make_shared<Manager>())
 {
-    m_pData->Start(this);  // Завести драндулет.
+    m_pData->Initialize(m_pData, this);  // Завести драндулет.
 }
 
 Backend::~Backend()
